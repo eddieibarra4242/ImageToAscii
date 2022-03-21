@@ -51,14 +51,14 @@ constexpr double BLUE_WEIGHT = 0.0722;
 
 constexpr double LUMA_MAX = 255;
 
-struct color
+struct Color
 {
     uint8_t red;
     uint8_t green;
     uint8_t blue;
 };
 
-struct configuration
+struct Configuration
 {
     bool malformed = false;
     bool inverted = false;
@@ -74,7 +74,7 @@ struct configuration
     const char* output_path = OUT_PATH;
 } __attribute__((packed));
 
-constexpr double luma(color pixel)
+constexpr double luma(Color pixel)
 {
     auto red = static_cast<double>(pixel.red);
     auto green = static_cast<double>(pixel.green);
@@ -83,7 +83,7 @@ constexpr double luma(color pixel)
     return (RED_WEIGHT * red + GREEN_WEIGHT * green + BLUE_WEIGHT * blue) / LUMA_MAX;
 }
 
-constexpr double perceived_luma_fast(color pixel)
+constexpr double perceived_luma_fast(Color pixel)
 {
     auto red = static_cast<double>(pixel.red);
     auto green = static_cast<double>(pixel.green);
@@ -92,7 +92,7 @@ constexpr double perceived_luma_fast(color pixel)
     return (RED_WEIGHT_PERC * red + GREEN_WEIGHT_PERC * green + BLUE_WEIGHT_PERC * blue) / LUMA_MAX;
 }
 
-constexpr double perceived_luma(color pixel)
+constexpr double perceived_luma(Color pixel)
 {
     auto red = static_cast<double>(pixel.red);
     auto green = static_cast<double>(pixel.green);
@@ -101,13 +101,13 @@ constexpr double perceived_luma(color pixel)
     return sqrt(RED_WEIGHT_PERC * red * red + GREEN_WEIGHT_PERC * green * green + BLUE_WEIGHT_PERC * blue * blue) / LUMA_MAX;
 }
 
-constexpr double average_luma(configuration config, const std::unique_ptr<color>& pixels, int width, int height, int startx, int starty)
+constexpr double average_luma(Configuration config, const std::unique_ptr<Color>& pixels, int width, int height, int startx, int starty)
 {
     double luminance = 0;
     double denom = 1;
     for (int y = starty; y < height && static_cast<size_t>(y - starty) < config.y_thingy; y++) {
         for (int x = startx; x < width && static_cast<size_t>(x - startx) < config.x_thingy; x++) {
-            color pixel = pixels.get()[x + y * width];
+            Color pixel = pixels.get()[x + y * width];
             if (config.alt) {
                 luminance += perceived_luma_fast(pixel);
             } else if (config.perceived) {
@@ -126,9 +126,9 @@ constexpr double average_luma(configuration config, const std::unique_ptr<color>
     return luminance;
 }
 
-configuration parse_command_line_args(int args, char* argv[])
+Configuration parse_command_line_args(int args, char* argv[])
 {
-    configuration res;
+    Configuration res;
 
     if (args < 2) {
         fmt::print(USAGE);
@@ -199,7 +199,7 @@ int main(int args, char* argv[])
     spdlog::set_level(spdlog::level::debug);
 #endif
 
-    configuration config = parse_command_line_args(args, argv);
+    Configuration config = parse_command_line_args(args, argv);
 
     if (config.malformed) {
         return EXIT_FAILURE;
@@ -209,16 +209,16 @@ int main(int args, char* argv[])
     int width = 0;
     int height = 0;
     int num_cmp = 0;
-    uint8_t* comps = stbi_load(img_path, &width, &height, &num_cmp, sizeof(color));
+    uint8_t* comps = stbi_load(img_path, &width, &height, &num_cmp, sizeof(Color));
 
-    if (comps == nullptr || num_cmp != sizeof(color)) {
+    if (comps == nullptr || num_cmp != sizeof(Color)) {
         spdlog::critical("Failed to load {}", img_path);
         return EXIT_FAILURE;
     }
 
     size_t length = static_cast<size_t>(width * height);
-    std::unique_ptr<color> pixels{ new color[length] };
-    memcpy(pixels.get(), comps, length * sizeof(color));
+    std::unique_ptr<Color> pixels{new Color[length] };
+    memcpy(pixels.get(), comps, length * sizeof(Color));
     stbi_image_free(comps);
 
     std::ofstream file(config.output_path);
