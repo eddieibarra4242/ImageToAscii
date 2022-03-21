@@ -146,7 +146,7 @@ configuration parse_command_line_args(int args, char* argv[])
         for (size_t charIndex = 1; charIndex < length; charIndex++) {
             switch (argv[i][charIndex]) {
             case '-': {
-                if (charIndex + 1 < length && strcmp(&argv[i][charIndex + 1], "help")) {
+                if (charIndex + 1 < length && (strcmp(&argv[i][charIndex + 1], "help") == 0)) {
                     fmt::print(USAGE);
                     res.malformed = true;
                     return res;
