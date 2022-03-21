@@ -108,7 +108,7 @@ constexpr double average_luma(configuration config, const std::unique_ptr<color>
     for (int y = starty; y < height && static_cast<size_t>(y - starty) < config.y_thingy; y++) {
         for (int x = startx; x < width && static_cast<size_t>(x - startx) < config.x_thingy; x++) {
             color pixel = pixels.get()[x + y * width];
-            if (config.perceived && config.alt) {
+            if (config.alt) {
                 luminance += perceived_luma_fast(pixel);
             } else if (config.perceived) {
                 luminance += perceived_luma(pixel);
