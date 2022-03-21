@@ -17,6 +17,7 @@
 #include <memory>
 
 #include <fstream>
+#include <iostream>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -27,7 +28,6 @@
 
 constexpr std::string_view DENSITY{ "@QB#NgWM8RDHdOKq9$6khEPXwmeZaoS2yjufF]}{tx1zv7lciL/\\|?*>r^;:_\"~,'.-`" };
 
-constexpr const char* OUT_PATH = "./out.txt";
 constexpr const char* USAGE =
     R"(Image To Ascii
 Usage:
@@ -71,7 +71,7 @@ struct Configuration
 
     size_t num_spaces = 9;
 
-    const char* output_path = OUT_PATH;
+    std::string_view output_path { };
 } __attribute__((packed));
 
 constexpr double luma(Color pixel)
@@ -101,12 +101,12 @@ constexpr double perceived_luma(Color pixel)
     return sqrt(RED_WEIGHT_PERC * red * red + GREEN_WEIGHT_PERC * green * green + BLUE_WEIGHT_PERC * blue * blue) / LUMA_MAX;
 }
 
-constexpr double average_luma(Configuration config, const std::unique_ptr<Color>& pixels, int width, int height, int startx, int starty)
+constexpr double average_luma(Configuration config, const std::unique_ptr<Color>& pixels, size_t width, size_t height, uint32_t startx, uint32_t starty)
 {
     double luminance = 0;
     double denom = 1;
-    for (int y = starty; y < height && static_cast<size_t>(y - starty) < config.y_thingy; y++) {
-        for (int x = startx; x < width && static_cast<size_t>(x - startx) < config.x_thingy; x++) {
+    for (uint32_t y = starty; y < height && static_cast<size_t>(y - starty) < config.y_thingy; y++) {
+        for (uint32_t x = startx; x < width && static_cast<size_t>(x - startx) < config.x_thingy; x++) {
             Color pixel = pixels.get()[x + y * width];
             if (config.alt) {
                 luminance += perceived_luma_fast(pixel);
@@ -170,6 +170,8 @@ Configuration parse_command_line_args(int args, char* argv[])
                 } else {
                     res.num_spaces = std::stoull(&argv[i][charIndex + 1]);
                 }
+
+                charIndex = length; //break out of inner for loop.
                 break;
             }
 
@@ -179,6 +181,8 @@ Configuration parse_command_line_args(int args, char* argv[])
                 } else {
                     res.output_path = &argv[i][charIndex + 1];
                 }
+
+                charIndex = length; //break out of inner for loop.
                 break;
             }
             case 'p':
@@ -191,6 +195,28 @@ Configuration parse_command_line_args(int args, char* argv[])
     }
 
     return res;
+}
+
+void doAsciiConversion(Configuration config, std::ostream& out, const std::unique_ptr<Color>& pixels, size_t width, size_t height) {
+    for (uint32_t y = 0; y < height; y += config.y_thingy) {
+        for (uint32_t x = 0; x < width; x += config.x_thingy) {
+            double luminance = average_luma(config, pixels, width, height, x, y);
+
+            if (!config.inverted) {
+                luminance = (1 - luminance);
+            }
+
+            auto index = static_cast<size_t>(static_cast<double>(DENSITY.size() + config.num_spaces) * luminance);
+
+            if (index >= DENSITY.size()) {
+                out << ' ';
+            } else {
+                out << DENSITY[index];
+            }
+        }
+
+        out << '\n';
+    }
 }
 
 int main(int args, char* argv[])
@@ -206,45 +232,36 @@ int main(int args, char* argv[])
     }
 
     const char* img_path = argv[args - 1];
-    int width = 0;
-    int height = 0;
+    int w = 0;
+    int h = 0;
     int num_cmp = 0;
-    uint8_t* comps = stbi_load(img_path, &width, &height, &num_cmp, sizeof(Color));
+    uint8_t* comps = stbi_load(img_path, &w, &h, &num_cmp, sizeof(Color));
 
     if (comps == nullptr || num_cmp != sizeof(Color)) {
         spdlog::critical("Failed to load {}", img_path);
         return EXIT_FAILURE;
     }
 
-    size_t length = static_cast<size_t>(width * height);
+    auto width = static_cast<size_t>(w);
+    auto height = static_cast<size_t>(h);
+
+    size_t length = width * height;
     std::unique_ptr<Color> pixels{new Color[length] };
     memcpy(pixels.get(), comps, length * sizeof(Color));
     stbi_image_free(comps);
 
-    std::ofstream file(config.output_path);
+    if(config.output_path.empty()) {
+        doAsciiConversion(config, std::cout, pixels, width, height);
+        return EXIT_SUCCESS;
+    }
+
+    std::ofstream file(config.output_path.cbegin());
     if (!file.is_open()) {
         spdlog::critical("Could not open {}", config.output_path);
         return EXIT_FAILURE;
     }
 
-    for (int y = 0; y < height; y += config.y_thingy) {
-        for (int x = 0; x < width; x += config.x_thingy) {
-            double luminance = average_luma(config, pixels, width, height, x, y);
-
-            if (!config.inverted) {
-                luminance = (1 - luminance);
-            }
-
-            auto index = static_cast<size_t>(static_cast<double>(DENSITY.size() + config.num_spaces) * luminance);
-
-            if (index >= DENSITY.size()) {
-                file << ' ';
-            } else {
-                file << DENSITY[index];
-            }
-        }
-        file << '\n';
-    }
+    doAsciiConversion(config, file, pixels, width, height);
 
     file.close();
     if (!file.good()) {
