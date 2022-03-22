@@ -72,7 +72,7 @@ struct Configuration
     size_t num_spaces = 9;
 
     std::string_view output_path { };
-} __attribute__((packed));
+};
 
 constexpr double luma(Color pixel)
 {
@@ -198,8 +198,8 @@ Configuration parse_command_line_args(int args, char* argv[])
 }
 
 void doAsciiConversion(Configuration config, std::ostream& out, const std::unique_ptr<Color>& pixels, size_t width, size_t height) {
-    for (uint32_t y = 0; y < height; y += config.y_thingy) {
-        for (uint32_t x = 0; x < width; x += config.x_thingy) {
+    for (uint32_t y = 0; y < height; y += static_cast<uint32_t>(config.y_thingy)) {
+        for (uint32_t x = 0; x < width; x += static_cast<uint32_t>(config.x_thingy)) {
             double luminance = average_luma(config, pixels, width, height, x, y);
 
             if (!config.inverted) {
