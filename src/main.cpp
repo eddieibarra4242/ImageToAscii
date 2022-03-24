@@ -36,9 +36,12 @@ Options:
         -a         Use fast perceived luminance algorithm
         -h, --help Show this message.
         -i         Invert brightness
-        -n NUMBER  Number of ' ' at the end of the density string. Default: 9
+        -n NUMBER  Number of spaces (' ') at the end of the density string. Default: 9
         -o FILE    Output path
         -p         Use perceived luminance
+        -r RATIO   Font ratio for better sizing. RATIO is in the
+                   format (FONT WIDTH:FONT HEIGHT) or (FONT WIDTH/FONT HEIGHT).
+                   The default is 1:2.
 )";
 
 constexpr double RED_WEIGHT_PERC = 0.299;
@@ -51,6 +54,8 @@ constexpr double BLUE_WEIGHT = 0.0722;
 
 constexpr double LUMA_MAX = 255;
 
+constexpr const char RATIO_DELIM[3] = ":/";
+
 struct Color
 {
     uint8_t red;
@@ -60,19 +65,30 @@ struct Color
 
 struct Configuration
 {
-    bool malformed = false;
+    bool print_usage = false;
     bool inverted = false;
     bool perceived = false;
     bool alt = false;
 
-    // TODO: Needs better name
-    size_t x_thingy = 1;
-    size_t y_thingy = 2;
+    uint32_t y_inc = 2;
 
     size_t num_spaces = 9;
 
+    std::string_view input_path { };
     std::string_view output_path { };
 };
+
+constexpr uint32_t clamp(uint32_t x, uint32_t min, uint32_t max) {
+    if(x < min) {
+        return min;
+    }
+
+    if(x > max) {
+        return max;
+    }
+
+    return x;
+}
 
 constexpr double luma(Color pixel)
 {
@@ -101,112 +117,109 @@ constexpr double perceived_luma(Color pixel)
     return sqrt(RED_WEIGHT_PERC * red * red + GREEN_WEIGHT_PERC * green * green + BLUE_WEIGHT_PERC * blue * blue) / LUMA_MAX;
 }
 
-constexpr double average_luma(Configuration config, const std::unique_ptr<Color>& pixels, size_t width, size_t height, uint32_t startx, uint32_t starty)
+constexpr double average_luma(Configuration config, const std::unique_ptr<Color>& pixels, size_t width, size_t height, uint32_t x, uint32_t start_y)
 {
-    double luminance = 0;
-    double denom = 1;
-    for (uint32_t y = starty; y < height && static_cast<size_t>(y - starty) < config.y_thingy; y++) {
-        for (uint32_t x = startx; x < width && static_cast<size_t>(x - startx) < config.x_thingy; x++) {
-            Color pixel = pixels.get()[x + y * width];
-            if (config.alt) {
-                luminance += perceived_luma_fast(pixel);
-            } else if (config.perceived) {
-                luminance += perceived_luma(pixel);
-            } else {
-                luminance += luma(pixel);
-            }
+    double numerator = 0;
+    double denominator = 1;
+    for (uint32_t y = start_y; y < height && static_cast<size_t>(y - start_y) < config.y_inc; y++) {
+        Color pixel = pixels.get()[x + y * width];
+        if (config.alt) {
+            numerator += perceived_luma_fast(pixel);
+        } else if (config.perceived) {
+            numerator += perceived_luma(pixel);
+        } else {
+            numerator += luma(pixel);
+        }
 
-            if (y != starty || x != startx) {
-                denom++;
-            }
+        if (y != start_y) {
+            denominator++;
         }
     }
 
-    luminance /= denom;
-    return luminance;
+    return numerator / denominator;
+}
+
+void parse_arg(Configuration& config, const std::string_view& arg)
+{
+    static char previous_arg = '\0';
+
+    if(!arg.starts_with('-')) {
+        switch(previous_arg) {
+            case 'n': config.num_spaces = std::stoull(arg.data()); break;
+            case 'o': config.output_path = arg; break;
+            case 'r': {
+                std::unique_ptr<char> buffer {new char[arg.length()]};
+                strcpy(buffer.get(), arg.data());
+                const char* x_part = strtok(buffer.get(), RATIO_DELIM);
+                const char* y_part = strtok(nullptr, RATIO_DELIM);
+
+                if(y_part == nullptr) {
+                    break;
+                }
+
+                for(const char* dummy = strtok(nullptr, RATIO_DELIM); dummy != nullptr; dummy = strtok(nullptr, RATIO_DELIM));
+                config.y_inc = clamp(static_cast<uint32_t>(std::stof(y_part) / std::stof(x_part)), 1, 1000);
+                break;
+            }
+            default: config.input_path = arg;
+        }
+
+        previous_arg = '\0';
+        return;
+    }
+
+    if(arg.starts_with("--") && (strcmp("--help", arg.data()) == 0)) {
+        config.print_usage = true;
+        return;
+    }
+
+    for(size_t i = 1; i < arg.length(); i++) {
+        char a = arg[i];
+
+        if(previous_arg != '\0') {
+            return parse_arg(config, arg.substr(i));
+        }
+
+        switch (a) {
+            case 'a': config.alt = true; break;
+            case 'h': config.print_usage = true; break;
+            case 'i': config.inverted = true; break;
+            case 'n': previous_arg = 'n'; break;
+            case 'o': previous_arg = 'o'; break;
+            case 'r': previous_arg = 'r'; break;
+            case 'p': config.perceived = true; break;
+            default: config.print_usage = true; break;
+        }
+    }
 }
 
 Configuration parse_command_line_args(int args, char* argv[])
 {
     Configuration res;
 
-    if (args < 2) {
-        fmt::print(USAGE);
-        res.malformed = true;
+    if(args < 2) {
+        res.print_usage = true;
         return res;
     }
 
-    for (int i = 0; i < args; i++) {
+    for(int i = 1; i < args; i++) {
         spdlog::debug("argv[{}] = {}", i, argv[i]);
-        if (argv[i][0] != '-') {
-            continue;
-        }
-
-        size_t length = strlen(argv[i]);
-        for (size_t charIndex = 1; charIndex < length; charIndex++) {
-            switch (argv[i][charIndex]) {
-            case '-': {
-                if (charIndex + 1 < length && (strcmp(&argv[i][charIndex + 1], "help") == 0)) {
-                    fmt::print(USAGE);
-                    res.malformed = true;
-                    return res;
-                }
-                break;
-            }
-            case 'a':
-                res.alt = true;
-                break;
-            case 'h': {
-                fmt::print(USAGE);
-                res.malformed = true;
-                return res;
-            }
-            case 'i':
-                res.inverted = true;
-                break;
-            case 'n': {
-                if (charIndex + 1 >= length) {
-                    res.num_spaces = std::stoull(argv[++i]);
-                } else {
-                    res.num_spaces = std::stoull(&argv[i][charIndex + 1]);
-                }
-
-                charIndex = length; //break out of inner for loop.
-                break;
-            }
-
-            case 'o': {
-                if (charIndex + 1 >= length) {
-                    res.output_path = argv[++i];
-                } else {
-                    res.output_path = &argv[i][charIndex + 1];
-                }
-
-                charIndex = length; //break out of inner for loop.
-                break;
-            }
-            case 'p':
-                res.perceived = true;
-                break;
-            default:
-                continue;
-            }
-        }
+        parse_arg(res, argv[i]);
     }
 
     return res;
 }
 
 void doAsciiConversion(Configuration config, std::ostream& out, const std::unique_ptr<Color>& pixels, size_t width, size_t height) {
-    for (uint32_t y = 0; y < height; y += static_cast<uint32_t>(config.y_thingy)) {
-        for (uint32_t x = 0; x < width; x += static_cast<uint32_t>(config.x_thingy)) {
+    for (uint32_t y = 0; y < height; y += config.y_inc) {
+        for (uint32_t x = 0; x < width; x++) {
             double luminance = average_luma(config, pixels, width, height, x, y);
 
             if (!config.inverted) {
                 luminance = (1 - luminance);
             }
 
-            auto index = static_cast<size_t>(static_cast<double>(DENSITY.size() + config.num_spaces) * luminance);
+            auto index = static_cast<size_t>(static_cast<double>(DENSITY.size() + config.num_spaces - 1) * luminance);
 
             if (index >= DENSITY.size()) {
                 out << ' ';
@@ -227,18 +240,18 @@ int main(int args, char* argv[])
 
     Configuration config = parse_command_line_args(args, argv);
 
-    if (config.malformed) {
-        return EXIT_FAILURE;
+    if (config.print_usage || config.input_path.empty()) {
+        fmt::print(USAGE);
+        return EXIT_SUCCESS;
     }
 
-    const char* img_path = argv[args - 1];
     int w = 0;
     int h = 0;
     int num_cmp = 0;
-    uint8_t* comps = stbi_load(img_path, &w, &h, &num_cmp, sizeof(Color));
+    uint8_t* comps = stbi_load(config.input_path.data(), &w, &h, &num_cmp, sizeof(Color));
 
     if (comps == nullptr || num_cmp != sizeof(Color)) {
-        spdlog::critical("Failed to load {}", img_path);
+        spdlog::critical("Failed to load {}", config.input_path);
         return EXIT_FAILURE;
     }
 
@@ -255,7 +268,7 @@ int main(int args, char* argv[])
         return EXIT_SUCCESS;
     }
 
-    std::ofstream file(config.output_path.cbegin());
+    std::ofstream file(config.output_path.data());
     if (!file.is_open()) {
         spdlog::critical("Could not open {}", config.output_path);
         return EXIT_FAILURE;
