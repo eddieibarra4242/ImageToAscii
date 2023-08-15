@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.25)
 
 # Set the project name to your project name, my project isn't very descriptive
 project(ImageToAscii CXX)
@@ -31,19 +31,7 @@ include(cmake/Cache.cmake)
 include(cmake/CompilerWarnings.cmake)
 set_project_warnings(project_warnings)
 
-# sanitizer options if supported by compiler
-include(cmake/Sanitizers.cmake)
-enable_sanitizers(project_options)
-
 # allow for static analysis options
 include(cmake/StaticAnalyzers.cmake)
-
-# Set up some extra Conan dependencies based on our needs before loading Conan
-set(CONAN_EXTRA_REQUIRES
-        stb/cci.20210910)
-set(CONAN_EXTRA_OPTIONS "")
-
-include(cmake/Conan.cmake)
-run_conan()
 
 add_subdirectory(src)

@@ -20,9 +20,32 @@
 #include <iostream>
 
 #define STB_IMAGE_IMPLEMENTATION
+
+#if defined(__clang__)
+#   pragma clang diagnostic push
+#   pragma clang diagnostic ignored "-Wold-style-cast"
+#   pragma clang diagnostic ignored "-Wsign-conversion"
+#   pragma clang diagnostic ignored "-Wcast-align"
+#   pragma clang diagnostic ignored "-Wimplicit-int-conversion"
+#   pragma clang diagnostic ignored "-Wdouble-promotion"
+#elif defined(__GNUC__) || defined(__GNUG__)
+#   pragma GCC diagnostic push
+#   pragma GCC diagnostic ignored "-Wold-style-cast"
+#   pragma GCC diagnostic ignored "-Wsign-conversion"
+#   pragma GCC diagnostic ignored "-Wcast-align"
+#   pragma GCC diagnostic ignored "-Wdouble-promotion"
+#   pragma GCC diagnostic ignored "-Wduplicated-branches"
+#   pragma GCC diagnostic ignored "-Wuseless-cast"
+#   pragma GCC diagnostic ignored "-Wconversion"
+#endif
+
 #include <stb_image.h>
 
-#include <spdlog/spdlog.h>
+#if defined(__clang__)
+#   pragma clang diagnostic pop
+#elif defined(__GNUC__) || defined(__GNUG__)
+#   pragma GCC diagnostic pop
+#endif
 
 #include <string_view>
 
@@ -255,7 +278,9 @@ Configuration parse_command_line_args(int args, char* argv[])
     }
 
     for(int i = 1; i < args; i++) {
-        spdlog::debug("argv[{}] = {}", i, argv[i]);
+#ifndef NDEBUG
+        std::cout << "argv[" << i << "] = " << argv[i] << '\n';
+#endif
         parse_arg(res, argv[i]);
     }
 
@@ -264,14 +289,10 @@ Configuration parse_command_line_args(int args, char* argv[])
 
 int main(int args, char* argv[])
 {
-#ifndef NDEBUG
-    spdlog::set_level(spdlog::level::debug);
-#endif
-
     Configuration config = parse_command_line_args(args, argv);
 
     if (config.print_usage || config.input_path.empty()) {
-        fmt::print(USAGE);
+        std::cout << USAGE;
         return EXIT_SUCCESS;
     }
 
@@ -279,7 +300,7 @@ int main(int args, char* argv[])
     uint8_t* comps = stbi_load(config.input_path.data(), &w, &h, &n, sizeof(Color));
 
     if (comps == nullptr) {
-        spdlog::critical("Failed to load {}", config.input_path);
+        std::cerr << "Failed to load " << config.input_path << '\n';
         return EXIT_FAILURE;
     }
 
@@ -310,7 +331,7 @@ int main(int args, char* argv[])
 
     std::ofstream file(config.output_path.data());
     if (!file.is_open()) {
-        spdlog::critical("Could not open {}", config.output_path);
+        std::cerr << "Could not open " << config.output_path << '\n';
         return EXIT_FAILURE;
     }
 
@@ -318,7 +339,7 @@ int main(int args, char* argv[])
 
     file.close();
     if (!file.good()) {
-        spdlog::critical("Bad file: {}", config.output_path);
+        std::cerr << "Bad file: " << config.output_path << '\n';
         return EXIT_FAILURE;
     }
 
