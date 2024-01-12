@@ -49,9 +49,9 @@
 
 #include <string_view>
 
-constexpr std::string_view DENSITY{ "@QB#NgWM8RDHdOKq9$6khEPXwmeZaoS2yjufF]}{tx1zv7lciL/\\|?*>r^;:_\"~,'.-`" };
+static constexpr std::string_view DENSITY{ "@QB#NgWM8RDHdOKq9$6khEPXwmeZaoS2yjufF]}{tx1zv7lciL/\\|?*>r^;:_\"~,'.-`" };
 
-constexpr const char* USAGE =
+static constexpr const char* USAGE =
     R"(Image To Ascii
 Usage:
     ascii [options] filename
@@ -72,17 +72,17 @@ Options:
                    The default is 1:2.
 )";
 
-constexpr double RED_WEIGHT_PERC = 0.299;
-constexpr double GREEN_WEIGHT_PERC = 0.587;
-constexpr double BLUE_WEIGHT_PERC = 0.114;
+static constexpr double RED_WEIGHT_PERC = 0.299;
+static constexpr double GREEN_WEIGHT_PERC = 0.587;
+static constexpr double BLUE_WEIGHT_PERC = 0.114;
 
-constexpr double RED_WEIGHT = 0.2126;
-constexpr double GREEN_WEIGHT = 0.7152;
-constexpr double BLUE_WEIGHT = 0.0722;
+static constexpr double RED_WEIGHT = 0.2126;
+static constexpr double GREEN_WEIGHT = 0.7152;
+static constexpr double BLUE_WEIGHT = 0.0722;
 
-constexpr double LUMA_MAX = 255;
+static constexpr double LUMA_MAX = 255;
 
-constexpr const char RATIO_DELIM[3] = ":/";
+static constexpr char RATIO_DELIM[3] = ":/";
 
 struct Color
 {
@@ -129,34 +129,34 @@ constexpr uint32_t clamp(uint32_t x, uint32_t min, uint32_t max) {
     return x;
 }
 
-constexpr double luma(Color pixel)
+constexpr double luma(const Color& pixel)
 {
-    auto red = static_cast<double>(pixel.red);
-    auto green = static_cast<double>(pixel.green);
-    auto blue = static_cast<double>(pixel.blue);
+    const auto red = static_cast<double>(pixel.red);
+    const auto green = static_cast<double>(pixel.green);
+    const auto blue = static_cast<double>(pixel.blue);
 
     return (RED_WEIGHT * red + GREEN_WEIGHT * green + BLUE_WEIGHT * blue) / LUMA_MAX;
 }
 
-constexpr double perceived_luma_fast(Color pixel)
+constexpr double perceived_luma_fast(const Color& pixel)
 {
-    auto red = static_cast<double>(pixel.red);
-    auto green = static_cast<double>(pixel.green);
-    auto blue = static_cast<double>(pixel.blue);
+    const auto red = static_cast<double>(pixel.red);
+    const auto green = static_cast<double>(pixel.green);
+    const auto blue = static_cast<double>(pixel.blue);
 
     return (RED_WEIGHT_PERC * red + GREEN_WEIGHT_PERC * green + BLUE_WEIGHT_PERC * blue) / LUMA_MAX;
 }
 
-constexpr double perceived_luma(Color pixel)
+constexpr double perceived_luma(const Color& pixel)
 {
-    auto red = static_cast<double>(pixel.red);
-    auto green = static_cast<double>(pixel.green);
-    auto blue = static_cast<double>(pixel.blue);
+    const auto red = static_cast<double>(pixel.red);
+    const auto green = static_cast<double>(pixel.green);
+    const auto blue = static_cast<double>(pixel.blue);
 
     return sqrt(RED_WEIGHT_PERC * red * red + GREEN_WEIGHT_PERC * green * green + BLUE_WEIGHT_PERC * blue * blue) / LUMA_MAX;
 }
 
-constexpr double average_luma(Configuration config, const std::unique_ptr<Color>& pixels, Quad region, size_t img_width, size_t img_height)
+constexpr double average_luma(const Configuration& config, const std::unique_ptr<Color>& pixels, const Quad& region, size_t img_width, size_t img_height)
 {
     double luma_accumulator = 0;
     double pixel_count = 0;
@@ -183,7 +183,7 @@ constexpr double average_luma(Configuration config, const std::unique_ptr<Color>
     }
 }
 
-void doAsciiConversion(Configuration config, std::ostream& out, const std::unique_ptr<Color>& pixels, size_t img_width, size_t img_height) {
+void doAsciiConversion(const Configuration& config, std::ostream& out, const std::unique_ptr<Color>& pixels, size_t img_width, size_t img_height) {
     double quad_width = static_cast<double>(img_width) / static_cast<double>(config.cols);
     double quad_height = static_cast<double>(img_height) / (static_cast<double>(config.rows) * config.font_ratio);
 
@@ -220,7 +220,7 @@ void parse_arg(Configuration& config, const std::string_view& arg)
             case 'n': config.num_spaces = std::stoull(arg.data()); break;
             case 'o': config.output_path = arg; break;
             case 'r': {
-                std::unique_ptr<char> buffer {new char[arg.length()]};
+                const auto buffer { std::make_unique<char>(arg.length()) };
                 strcpy(buffer.get(), arg.data());
                 const char* x_part = strtok(buffer.get(), RATIO_DELIM);
                 const char* y_part = strtok(nullptr, RATIO_DELIM);
@@ -308,7 +308,7 @@ int main(int args, char* argv[])
     auto height = static_cast<size_t>(h);
 
     size_t length = width * height;
-    std::unique_ptr<Color> pixels{new Color[length] };
+    auto pixels { std::make_unique<Color>(length) };
     memcpy(pixels.get(), comps, length * sizeof(Color));
     stbi_image_free(comps);
 
